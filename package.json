@@ -1,0 +1,29 @@
+{
+  "name": "marketplace-server",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/uuid": "^9.0.3",
+    "bun-types": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cookie": "0.6.1",
+    "@elysiajs/cors": "^0.6.0",
+    "@elysiajs/jwt": "^0.6.3",
+    "@elysiajs/swagger": "^0.6.2",
+    "@solana/web3.js": "^1.78.4",
+    "aleph-sdk-ts": "^3.6.3",
+    "bs58": "^5.0.0",
+    "elysia": "0.6.22",
+    "firebase": "^10.3.1",
+    "firebase-admin": "^11.10.1",
+    "uuid": "^9.0.0"
+  }
+}
