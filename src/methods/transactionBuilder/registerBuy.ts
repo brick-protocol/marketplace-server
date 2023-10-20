@@ -1,57 +1,55 @@
-import { Product, AccountType, createRegisterBuyTransaction } from "brick-protocol";
-import { ACCOUNTS_DATA_LAYOUT } from "../../utils/layout/accounts";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { transactionBuilder, DirectPayInstructionAccounts } from "../../../../../Developer/sdk/dist";
+import { Connection, PublicKey, SYSVAR_RENT_PUBKEY, SystemProgram } from "@solana/web3.js";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { config } from "../../config";
+import { PRODUCT_MANAGER_ID_PK } from "../../constants";
+import { parse } from "uuid";
+import BN from 'bn.js'
 
 type RegisterBuyParams = {
-    signer: string,
-    marketplace: string, 
-    product: string, 
-    paymentMint: string, 
-    seller: string, 
-    marketplaceAuth: string, 
-    params: {
-        amount: number,
-        rewardsActive: boolean,
-    }
+    signer: string
+    seller: string
+    paymentMint: string
+    productId: string
+    amount: number
 }
 
 export async function registerBuy(params: RegisterBuyParams) {
     console.log('registerBuy starts');
 
     try {
-        if (!config.RPC || !config.MESSAGES_KEY || !config.INDEXER_API) {
+        if (!config.RPC) {
             return new Response('Error: Server configuration missing', { status: 500 });
         }
 
-        if (!params.signer || !params.marketplace || !params.product || !params.paymentMint || !params.seller || !params.marketplaceAuth || !params.params) {
+        if (!params.signer || !params.seller || !params.paymentMint || !params.productId || !params.paymentMint || !params.amount) {
             return new Response('Error: Missing required information', { status: 500 });
         }
 
         const connection = new Connection(config.RPC);
-        const accountInfo = await connection.getAccountInfo(new PublicKey(params.product));
-        const productInfo = ACCOUNTS_DATA_LAYOUT[AccountType.Product].deserialize(accountInfo?.data)[0] as Product
 
-        // guardar en firebase 'invoice' info
+        const [product] = PublicKey.findProgramAddressSync(
+            [Buffer.from('product'), parse(params.productId)],
+            PRODUCT_MANAGER_ID_PK
+        );
 
-        const accounts = {
+        const accounts: DirectPayInstructionAccounts = {
             signer: new PublicKey(params.signer),
-            marketplace: new PublicKey(params.marketplace),
-            product: new PublicKey(params.product),
-            paymentMint: new PublicKey(params.paymentMint),
             seller: new PublicKey(params.seller),
-            marketplaceAuth: new PublicKey(params.marketplaceAuth),
-            merkleTree: new PublicKey(productInfo.merkleTree),
+            product,
+            from: getAssociatedTokenAddressSync(new PublicKey(params.paymentMint), new PublicKey(params.signer)),
+            to: getAssociatedTokenAddressSync(new PublicKey(params.paymentMint), new PublicKey(params.seller)),
+            paymentMint: new PublicKey(params.paymentMint),
+            rent: SYSVAR_RENT_PUBKEY,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
         };
 
-        const parsedParams = {
-            rewardsActive: params.params.rewardsActive,
-            amount: Number(params.params.amount),
-        };
-
-        const transaction = await createRegisterBuyTransaction (connection, accounts, parsedParams);
-        const serializedTransaction = Buffer.from(transaction.serialize()).toString('base64')
-        console.log('Serialized transaction ', serializedTransaction)
+        const parsedParams = new BN(params.amount);
+        const transaction = await transactionBuilder.DirectPay(connection, accounts, parsedParams);
+        const serializedTransaction = Buffer.from(transaction.serialize()).toString('base64');
+        console.log('Serialized transaction ', serializedTransaction);
 
         return new Response(JSON.stringify({ transaction: serializedTransaction }), { status: 200, headers: { 'Content-Type': 'application/json' }});
     } catch (error) {

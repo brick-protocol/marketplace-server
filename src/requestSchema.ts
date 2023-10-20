@@ -74,4 +74,4 @@ const BodyRequest = t.Object({
   version: t.Number(),
 });
 
-export const validateSignatureBody = t.Array(BodyRequest);
+export const transactionsBody = t.Array(BodyRequest);

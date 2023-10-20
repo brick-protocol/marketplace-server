@@ -1,16 +1,15 @@
-import { createInitProductTransaction } from "brick-protocol";
-import { Connection, PublicKey } from "@solana/web3.js";
-import { createJsonResponse } from "../../utils";
+import { transactionBuilder, InitProductInstructionAccounts, InitProductInstructionArgs } from "../../../../../Developer/sdk/dist";
+import { Connection, PublicKey, SYSVAR_RENT_PUBKEY, SystemProgram } from "@solana/web3.js";
 import { config } from "../../config";
+import { parse } from "uuid";
+import { PRODUCT_MANAGER_ID_PK } from "../../constants";
 
 type InitProductParams = {
     signer: string,
     marketplace: string,
     paymentMint: string,
-    params: {
-        id: string,
-        productPrice: number,
-    }
+    id: string,
+    productPrice: number,
 }
 
 export async function initProduct(params: InitProductParams) {
@@ -18,23 +17,40 @@ export async function initProduct(params: InitProductParams) {
 
     try {
         if (!config.RPC) {
-            return createJsonResponse({ message: 'Error: Server rpc not configured' }, 500);
+            return new Response('Error: Missing required information', { status: 500 });
         }
 
         const connection = new Connection(config.RPC);
-        const accounts = {
+        const [product] = PublicKey.findProgramAddressSync(
+            [
+              Buffer.from("product", "utf-8"), 
+              parse(params.id)
+            ],
+            PRODUCT_MANAGER_ID_PK
+        );        
+        const accounts: InitProductInstructionAccounts = {
             signer: new PublicKey(params.signer),
-            marketplace: new PublicKey(params.marketplace),
-            paymentMint: new PublicKey(params.paymentMint)
+            product,
+            paymentMint: new PublicKey(params.paymentMint),
+            rent: SYSVAR_RENT_PUBKEY,
+            systemProgram: SystemProgram.programId,
+        };
+        const args: InitProductInstructionArgs = {
+            id: [...parse(params.id)],
+            price: params.productPrice
         };
 
-        const transaction = await createInitProductTransaction(connection, accounts, params.params);
+        const transaction = await transactionBuilder.InitProduct(
+            connection, 
+            accounts, 
+            args
+        );
         const serializedTransaction = Buffer.from(transaction.serialize()).toString('base64');
         console.log('Serialized transaction ', serializedTransaction);
 
-        return createJsonResponse({ message: serializedTransaction });
+        return new Response(JSON.stringify({ transaction: serializedTransaction }), { status: 200, headers: { 'Content-Type': 'application/json' }});
     } catch (error) {
         console.log(error);
-        return createJsonResponse({ message: 'Internal Server Error' }, 500);
+        return new Response('Internal Server Error', { status: 500 });
     }
 }
