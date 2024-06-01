@@ -1,12 +1,28 @@
+import { Connection } from "@solana/web3.js";
+
 export const config = {
+    HOST: Bun.env.HOST || '',
     PORT: Bun.env.PORT || '',
-    RPC: Bun.env.RPC || '',
-    MESSAGES_KEY: Bun.env.MESSAGES_KEY || '',
-    INDEXER_API: Bun.env.INDEXER_API || '',
-    ALEPH_CHANNEL: Bun.env.ALEPH_CHANNEL || '',
-    JWT_SECRET: Bun.env.JWT_SECRET || '',
-    FIREBASE_PROJECT_ID: Bun.env.FIREBASE_PROJECT_ID || '',
-    FIREBASE_EMAIL: Bun.env.FIREBASE_EMAIL || '',
-    FIREBASE_PRIVATE_KEY: Bun.env.FIREBASE_PRIVATE_KEY || '',
-    WEBHOOK_AUTH: Bun.env.FIREBASE_PRIVATE_KEY || '',
-}
+    RPC_KEY: Bun.env.RPC_KEY || '',
+    RPC: new Connection(`https://mainnet.helius-rpc.com/?api-key=${Bun.env.RPC_KEY || ''}`),
+    SUPABASE_PROJECT_ID: Bun.env.SUPABASE_PROJECT_ID || '',
+    SUPABASE_SERVICE_ROLE: Bun.env.SUPABASE_SERVICE_ROLE || '',
+    SUPABASE_ANON_KEY: Bun.env.SUPABASE_ANON_KEY || '',
+    SUPABASE_JWT_SECRET: Bun.env.SUPABASE_JWT_SECRET || '',
+};
+
+const requiredEnvVariables = [
+    'HOST',
+    'PORT',
+    'RPC_KEY',
+    'SUPABASE_PROJECT_ID',
+    'SUPABASE_SERVICE_ROLE',
+    'SUPABASE_ANON_KEY',
+    'SUPABASE_JWT_SECRET',
+];
+
+requiredEnvVariables.forEach(variable => {
+    if (config[variable as keyof typeof config] === '') {
+        throw new Error(`Missing required environment variable: ${variable}`);
+    }
+});
