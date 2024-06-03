@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { v4 as uuid } from "uuid";
 import { t } from "elysia";
 import { supabase } from "../supabase";
+import { middleware } from "./auth/middleware";
 
 export type CreateUserParams = {
     address: string;
@@ -54,7 +55,7 @@ export const userManager = new Elysia({ prefix: '/user' })
         }
 
         return new Response(JSON.stringify(data));
-    })
+    }, { beforeHandle: middleware })
 
     .get('/:id', async ({ params }) => {
         const { data, error } = await supabase
@@ -68,7 +69,7 @@ export const userManager = new Elysia({ prefix: '/user' })
         }
 
         return new Response(JSON.stringify(data));
-    })
+    }, { beforeHandle: middleware })
 
     .put('/create', async ({ body }: { body: CreateUserParams }) => {
         const user = {
@@ -86,7 +87,7 @@ export const userManager = new Elysia({ prefix: '/user' })
         }
         
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: CreateUserSchema })
+    }, { beforeHandle: middleware, body: CreateUserSchema })
 
     .put('/update', async ({ body }: { body: UpdateUserParams }) => {
         const { data, error } = await supabase
@@ -104,7 +105,7 @@ export const userManager = new Elysia({ prefix: '/user' })
         }
 
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: UpdateUserSchema })
+    }, { beforeHandle: middleware, body: UpdateUserSchema })
     
     .delete('/delete', async ({ body }: { body: DeleteUserParams }) => {
         const { data, error } = await supabase
@@ -117,4 +118,4 @@ export const userManager = new Elysia({ prefix: '/user' })
         }
 
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: DeleteUserSchema });
+    }, { beforeHandle: middleware, body: DeleteUserSchema });

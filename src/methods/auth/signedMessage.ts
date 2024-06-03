@@ -2,20 +2,17 @@ import bs58 from "bs58";
 import nacl from "tweetnacl";
 
 type SignMessage = {
-    domain: string;
     publicKey: string;
     nonce: string;
     statement: string;
 };
 
 export class SignedMessage {
-    domain: string;
     publicKey: string;
     nonce: string;
     statement: string;
 
-    constructor({ domain, publicKey, nonce, statement }: SignMessage) {
-        this.domain = domain;
+    constructor({ publicKey, nonce, statement }: SignMessage) {
         this.publicKey = publicKey;
         this.nonce = nonce;
         this.statement = statement;

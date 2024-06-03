@@ -2,6 +2,7 @@ import { t } from "elysia";
 import { Elysia } from "elysia";
 import { v4 as uuid } from "uuid";
 import { supabase } from "../supabase";
+import { middleware } from "./auth/middleware";
 
 export interface Market {
     id: string;
@@ -53,7 +54,7 @@ export const marketManager = new Elysia({ prefix: '/market' })
         }
 
         return new Response(JSON.stringify(data));
-    })
+    }, { beforeHandle: middleware })
 
     .get('/:id', async ({ params }) => {
         const { data, error } = await supabase
@@ -67,7 +68,7 @@ export const marketManager = new Elysia({ prefix: '/market' })
         }
 
         return new Response(JSON.stringify(data));
-    })
+    }, { beforeHandle: middleware })
 
     .post('/create', async ({ body }: { body: CreateMarketParams }) => {
         const market = {
@@ -85,7 +86,7 @@ export const marketManager = new Elysia({ prefix: '/market' })
         }
         
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: CreateMarketSchema })
+    }, { beforeHandle: middleware, body: CreateMarketSchema })
 
     .put('/update', async ({ body }: { body: UpdateMarketParams }) => {
         const { data, error } = await supabase
@@ -101,7 +102,7 @@ export const marketManager = new Elysia({ prefix: '/market' })
         }
 
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: UpdateMarketSchema })
+    }, { beforeHandle: middleware, body: UpdateMarketSchema })
 
     .delete('/delete', async ({ body }: { body: DeleteMarketParams }) => {
         const { data, error } = await supabase
@@ -114,4 +115,4 @@ export const marketManager = new Elysia({ prefix: '/market' })
         }
 
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: DeleteMarketSchema });
+    }, { beforeHandle: middleware, body: DeleteMarketSchema })

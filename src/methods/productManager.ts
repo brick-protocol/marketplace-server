@@ -4,6 +4,7 @@ import { t } from "elysia";
 import { supabase } from "../supabase";
 import { PublicKey } from "@solana/web3.js";
 import { PAYMENT_PROGRAM_PK } from "../constants";
+import { middleware } from "./auth/middleware";
 
 export type CreateProductParams = {
     price: string;
@@ -50,7 +51,8 @@ export const productManager = new Elysia({ prefix: '/product' })
         }
 
         return new Response(JSON.stringify(data));
-    })
+    }, { beforeHandle: middleware })
+
     .get('/:id', async ({ params }) => {
         const { data, error } = await supabase
             .from('products')
@@ -63,7 +65,8 @@ export const productManager = new Elysia({ prefix: '/product' })
         }
 
         return new Response(JSON.stringify(data));
-    })
+    }, { beforeHandle: middleware })
+    
     .put('/create', async ({ body }: { body: CreateProductParams }) => {
         const productId = parse(uuid());
         const marketplaceId = parse(body.market);
@@ -93,7 +96,8 @@ export const productManager = new Elysia({ prefix: '/product' })
         }
         
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: CreateProductSchema })
+    }, { beforeHandle: middleware, body: CreateProductSchema })
+
     .put('/update', async ({ body }: { body: UpdateProductParams }) => {
         const { data, error } = await supabase
             .from('products')
@@ -108,7 +112,8 @@ export const productManager = new Elysia({ prefix: '/product' })
         }
 
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: UpdateProductSchema })
+    }, { beforeHandle: middleware, body: UpdateProductSchema })
+
     .delete('/delete', async ({ body }: { body: DeleteProductParams }) => {
         const { data, error } = await supabase
             .from('products')
@@ -120,4 +125,4 @@ export const productManager = new Elysia({ prefix: '/product' })
         }
 
         return new Response(JSON.stringify({ message: 'success', data }));
-    }, { body: DeleteProductSchema });
+    }, { beforeHandle: middleware, body: DeleteProductSchema });

@@ -1,31 +1,30 @@
-import jwt from 'jsonwebtoken';
-import { SignedMessage } from './signedMessage';
-import { config } from '../../config';
+import { supabase } from "../../supabase";
 
-const authMiddleware = async (req: any, _: any, next: any) => {
-    const { message, signature } = req.body;
-
-    if (!message || !signature) {
-        return new Response(JSON.stringify({ error: 'Message and signature are required' }), { status: 400 });
+export const middleware = async ({ headers, set }: any) => {
+    const bearer = headers.authorization
+    if (!bearer) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
 
     try {
-        const signinMessage = new SignedMessage(JSON.parse(message));
-        const validationResult = await signinMessage.validate(signature);
+        const token = bearer.split(' ')[1];
+        const { data: { user }, error } = await supabase.auth.getUser(token);
 
-        if (!validationResult) {
-            return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401 });
+        if (error || !user) {
+            return new Response(JSON.stringify({ error: 'Invalid or expired token' }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' },
+            });
         }
 
-        const user = signinMessage.publicKey;
-        const token = jwt.sign(user, config.SUPABASE_JWT_SECRET, { expiresIn: '2h' });
-
-        req.user = user;
-        req.token = token;
-        next();
-    } catch (e: any) {
-        return new Response(JSON.stringify({ error: e.toString() }), { status: 500 });
+        set.user = user
+    } catch (error: any) {
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
 };
-
-export default authMiddleware;
