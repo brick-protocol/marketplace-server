@@ -5,7 +5,9 @@
   "devDependencies": {
     "@types/uuid": "^9.0.3",
     "bun-types": "latest",
-    "@coral-xyz/borsh": "^0.30.0"
+    "@coral-xyz/borsh": "^0.30.0",
+    "@types/jsonwebtoken": "8.5.1",
+    "@types/bn.js": "5.1.5"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
@@ -24,6 +26,8 @@
     "bn.js": "^5.2.1",
     "bs58": "^5.0.0",
     "elysia": "^1.0.0-rc.19",
+    "jsonwebtoken": "^8.5.1",
+    "tweetnacl": "^1.0.3",
     "uuid": "^9.0.1"
   }
 }

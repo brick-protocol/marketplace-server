@@ -51,10 +51,9 @@ export const authManager = new Elysia({ prefix: '/auth' })
         const { message, signature } = body;
 
         try {
-            // Validate the signed message
             const signinMessage = new SignedMessage(JSON.parse(message));
-            const validationResult = await signinMessage.validate(signature);
 
+            const validationResult = await signinMessage.validate(signature);
             if (!validationResult) {
                 return new Response(JSON.stringify({ error: 'Invalid signature' }), {
                     status: 401,
@@ -62,7 +61,6 @@ export const authManager = new Elysia({ prefix: '/auth' })
                 });
             }
 
-            // Check if the nonce is valid
             const storedNonce = await supabaseAuthAdapter.getNonce(signinMessage.publicKey);
             if (storedNonce !== signinMessage.nonce) {
                 return new Response(JSON.stringify({ error: 'Invalid nonce' }), {
@@ -71,41 +69,32 @@ export const authManager = new Elysia({ prefix: '/auth' })
                 });
             }
 
+            const address = signinMessage.publicKey;
             // Check if user exists, otherwise create a new one
             const { data: user, error: userError } = await supabase
                 .from('users')
                 .select('*')
-                .eq('id', signinMessage.publicKey)
+                .eq('address', address)
                 .single();
 
-            let userId;
             if (userError && userError.code !== 'PGRST116') {
                 throw userError;
             } else if (!user) {
                 const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-                    email: `${signinMessage.publicKey}@example.com`, // Placeholder email
-                    user_metadata: { address: signinMessage.publicKey },
+                    email: `${address}@example.com`, // Placeholder email
+                    user_metadata: { address: address },
                 });
 
-                if (authError) {
-                    throw authError;
-                }
-                userId = authUser.user.id;
-
+                if (authError) throw authError;
+                
                 await supabase
                     .from('users')
-                    .insert({ id: userId, address: signinMessage.publicKey });
-            } else {
-                userId = user.id;
+                    .update({ address })
+                    .eq('id', authUser.user.id);                
             }
 
-            // Generate JWT token
             const token = supabaseAuthAdapter.generateToken();
-            const session = await supabase.auth.setSession({ 
-                access_token: token, 
-                refresh_token: token
-            })
-            console.log(session)
+
             // Clear the nonce after successful login
             await supabase
                 .from('users')
@@ -114,7 +103,7 @@ export const authManager = new Elysia({ prefix: '/auth' })
                     last_auth: new Date().toISOString(), 
                     last_auth_status: 'success' 
                 })
-                .eq('address', signinMessage.publicKey);
+                .eq('address', address);
 
             return new Response(JSON.stringify({ token }), {
                 status: 200,

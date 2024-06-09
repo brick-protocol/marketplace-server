@@ -1,7 +1,7 @@
 import { supabase } from "../../supabase";
 
 export const middleware = async ({ headers, set }: any) => {
-    const bearer = headers.authorization
+    const bearer = headers.authorization;
     if (!bearer) {
         return new Response(JSON.stringify({ error: 'Unauthorized' }), {
             status: 401,
@@ -20,7 +20,7 @@ export const middleware = async ({ headers, set }: any) => {
             });
         }
 
-        set.user = user
+        set.user = user;
     } catch (error: any) {
         return new Response(JSON.stringify({ error: error.message }), {
             status: 500,

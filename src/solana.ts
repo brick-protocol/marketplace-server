@@ -1,9 +1,11 @@
-import { AccountMeta, Connection, PublicKey, TransactionInstruction } from '@solana/web3.js';
+import { AccountMeta, ComputeBudgetProgram, Connection, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { publicKey, struct, u32, u64, u8, array } from '@coral-xyz/borsh'
-import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { PAYMENT_PROGRAM_PK } from './constants';
 import { config } from './config';
 import BN from 'bn.js';
+import { Product } from './types';
+import { parse } from 'uuid';
 
 export async function getPriorityFee(connection: Connection): Promise<number | null> {
   const blockHeight = (await connection.getBlockHeight());
@@ -152,4 +154,97 @@ export async function getMintData(mint: string): Promise<Mint> {
   if (!response) throw new Error('Failed to get program accounts')
 
   return MintLayout.decode(response.data)
+}
+
+export async function getJupInstructions(inputMint: string, outputMint: string, amount: number, signer: string) {
+  const quoteResponse = await (
+    await fetch(`https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}\
+      &outputMint=${outputMint}\
+      &amount=${amount}\
+      &swapMode=ExactOut\
+      &slippageBps=50`
+    )
+  ).json();
+
+  return await (
+    await fetch('https://quote-api.jup.ag/v6/swap-instructions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        quoteResponse,
+        userPublicKey: signer,
+      })
+    })
+  ).json() as TransactionInstruction[];
+}
+
+export async function getComputeUnits(originalInstructions: TransactionInstruction[], payerKey: PublicKey): Promise<number> {
+  const instructions = [...originalInstructions]; // dont modify original instructions vector
+
+  const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({
+    units: 1400000,
+  });
+  instructions.unshift(computeBudgetIx);
+
+  const message = new TransactionMessage({
+    payerKey,
+    recentBlockhash: PublicKey.default.toString(),
+    instructions,
+  }).compileToV0Message();
+
+  const transaction = new VersionedTransaction(message);
+  const rpcResponse = await config.RPC.simulateTransaction(transaction, {
+    replaceRecentBlockhash: true,
+    sigVerify: false,
+  });
+
+  return rpcResponse.value.unitsConsumed || 1400000;
+}
+
+export async function preparePayIx(product: Product, signer: PublicKey, amount: BN) {
+  const productId = parse(product.id);
+  const marketplaceId = parse(product.market);
+  const [index] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("index", "utf-8"),
+      marketplaceId,
+      productId
+    ],
+    PAYMENT_PROGRAM_PK
+  );
+  const mint = new PublicKey(product.currency);
+  const accounts = {
+    signer,
+    mint,
+    buyerVault: getAssociatedTokenAddressSync(mint, signer),
+    // to-do: seller should have this ata live when he creates/modifies the product mint
+    sellerVault: getAssociatedTokenAddressSync(mint, new PublicKey(product.seller)),
+    index
+  };
+  const { decimals } = await getMintData(product.currency);
+  const args = { amount, decimals };
+
+  return createPayInstruction(accounts, args);
+}
+
+export async function prepareTransaction(instructions: TransactionInstruction[], payerKey: PublicKey) {
+  const microLamports = await getPriorityFee(config.RPC) || 5000;
+  const computePriceIx = ComputeBudgetProgram.setComputeUnitPrice({ microLamports });
+  instructions.unshift(computePriceIx)
+
+  const units = await getComputeUnits([...instructions], payerKey);
+  const computeBudgetIx = ComputeBudgetProgram.setComputeUnitLimit({ units });
+  instructions.unshift(computeBudgetIx)
+
+  const recentBlockhash = (await config.RPC.getLatestBlockhash('finalized')).blockhash;
+  const messageV0 = new TransactionMessage({
+    payerKey,
+    recentBlockhash,
+    instructions,
+  }).compileToV0Message();
+  const transaction = new VersionedTransaction(messageV0);
+  
+  return Buffer.from(transaction.serialize()).toString('base64');
 }
