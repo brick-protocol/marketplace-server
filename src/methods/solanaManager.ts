@@ -1,9 +1,11 @@
 import { PublicKey, VersionedTransaction, TransactionInstruction } from "@solana/web3.js";
-import { getJupInstructions, preparePayIx, prepareTransaction } from "../solana";
+import { createSPLTokenInstruction, createSystemInstruction, getJupInstructions, getTransaction, validateTransfer } from "../solana";
 import { supabase } from "../supabase";
 import { Elysia, t } from "elysia";
 import { config } from "../config";
-import BN from "bn.js";
+import BigNumber from 'bignumber.js';
+import { APP_REFERENCE } from "../constants";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
 export type PayTransactionParams = {
   signer: string;
@@ -20,16 +22,29 @@ export const PayTransactionSchema = t.Object({
 });
 
 export type SendTransactionParams = {
+  productId: string,
   transaction: string,
 }
 
 export const SendTransactionSchema = t.Object({
+  productId: t.String(),
   transaction: t.String(),
 });
 
 export const solanaManager = new Elysia({ prefix: '/solana' })
-  .post('/payTransaction', async ({ body }: { body: PayTransactionParams }) => {
+  .post('/createTransaction', async ({ body }: { body: PayTransactionParams }) => {
     try {
+      const signer = new PublicKey(body.signer);
+      const senderInfo = await config.RPC.getAccountInfo(signer);
+      if (!senderInfo) {
+        const message = 'Sender not found';
+        console.error(message);
+        return new Response(JSON.stringify({ error: message }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       const { data: product, error } = await supabase
         .from('products')
         .select('*')
@@ -37,23 +52,44 @@ export const solanaManager = new Elysia({ prefix: '/solana' })
         .single();
 
       if (error || !product) {
-        console.error('Error fetching product:', error.message);
-        throw new Error('Product does not exist');
+        const message = 'Error fetching product';
+        console.error(message, error.message);
+        return new Response(JSON.stringify({ error: message }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
-      const quantity = new BN(body.quantity);
-      const price = new BN(product.price, 'hex');
-      const amount = quantity.mul(price);      
+      const quantity = new BigNumber(body.quantity);
+      const price = new BigNumber(product.price, 16);
+      const amount = quantity.multipliedBy(price);      
 
-      const jupInstructions: TransactionInstruction[] = [];
+      const instuctions: TransactionInstruction[] = [];
       if (body.currency !== product.currency) {
         const jupIxns = await getJupInstructions(body.currency, product.currency, amount.toNumber(), body.signer);
-        jupInstructions.push(...jupIxns);
+        instuctions.push(...jupIxns);
       }
 
-      const signer = new PublicKey(body.signer);
-      const payIx = await preparePayIx(product, signer, amount);
-      const serializedTransaction = prepareTransaction([...jupInstructions, payIx], signer);
+      const splToken = new PublicKey(product.currency);
+      const recipient = new PublicKey(product.seller);
+      const payInstruction = product.currency !== 'So11111111111111111111111111111111111111112'
+        ? await createSPLTokenInstruction(recipient, amount, splToken, signer)
+        : await createSystemInstruction(recipient, amount, signer, senderInfo);
+
+      const [productReference] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("reference", "utf-8"),
+          Buffer.from(product.id, "hex"),
+        ],
+        TOKEN_PROGRAM_ID
+      );
+      payInstruction.keys.push(
+        { pubkey: productReference, isWritable: false, isSigner: false },
+        { pubkey: APP_REFERENCE, isWritable: false, isSigner: false }
+      );
+      instuctions.push(payInstruction);
+
+      const serializedTransaction = getTransaction(instuctions, signer);
 
       return new Response(JSON.stringify({ message: serializedTransaction }))
     } catch (e: any) {
@@ -110,8 +146,9 @@ export const solanaManager = new Elysia({ prefix: '/solana' })
         throw new Error("Transaction confirmation failed");
       }
 
-      console.log(`${new Date().toISOString()} Transaction successful`);
-      console.log(`${new Date().toISOString()} Explorer URL: https://explorer.solana.com/tx/${signature}`);
+      console.log(`${new Date().toISOString()} Transaction successful: https://explorer.solana.com/tx/${signature}`);
+
+      await validateTransfer(signature, body.productId);
 
       return new Response(JSON.stringify({ message: 'success', signature }), {
         status: 200,

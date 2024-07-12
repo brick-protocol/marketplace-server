@@ -21,9 +21,11 @@ new WebSocketManager(wsConfig);
 new Elysia()
     .use(
         cors({
-            origin: '*', // config.APP_URL
-            methods: ['GET', 'POST', 'PUT', 'DELETE'],
-            allowedHeaders: ['Content-Type', 'Authorization'],
+            origin: 'http://127.0.0.1:3000', // config.APP_URL
+            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Content-Type', 'Origin', 'X-Requested-With', 'Accept', 'Authorization'],
+            credentials: true,
+            preflight: true
         })
     )
     .use(swagger()) // API documentation

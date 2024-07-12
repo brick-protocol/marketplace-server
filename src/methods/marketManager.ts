@@ -70,6 +70,47 @@ export const marketManager = new Elysia({ prefix: '/market' })
         return new Response(JSON.stringify(data));
     }, { beforeHandle: middleware })
 
+    .get('/user', async ({ cookie }) => {
+        try {
+            // to-do: the user id should be sent from the middleware... mmmm
+            const token = cookie.token.value;
+            const { data: { user } } = await supabase.auth.getUser(token);
+
+            if (!user) return new Response(JSON.stringify({ error: 'No user' }), { status: 500 });
+
+            const { data, error } = await supabase
+                .from('markets')
+                .select()
+                .eq('user', user.id); // Assuming 'user' field in 'markets' table stores user ID
+
+            if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+            
+            if (!data) {
+                const market = {
+                    id: uuid(),
+                    user: user.id,
+                    name: 'Market1'
+                };
+        
+                const { data } = await supabase
+                    .from('markets')
+                    .insert(market)
+                    .select('id');
+
+                console.log(data)
+
+                return new Response(JSON.stringify(data));
+            }
+
+            return new Response(JSON.stringify(data));
+        } catch (error: any) {
+            return new Response(JSON.stringify({ error: error.message }), {
+                status: 500,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        }
+    }, { beforeHandle: middleware })
+
     .post('/create', async ({ body }: { body: CreateMarketParams }) => {
         const market = {
             ...body,
@@ -88,7 +129,7 @@ export const marketManager = new Elysia({ prefix: '/market' })
         return new Response(JSON.stringify({ message: 'success', data }));
     }, { beforeHandle: middleware, body: CreateMarketSchema })
 
-    .put('/update', async ({ body }: { body: UpdateMarketParams }) => {
+    .post('/update', async ({ body }: { body: UpdateMarketParams }) => {
         const { data, error } = await supabase
             .from('markets')
             .update({

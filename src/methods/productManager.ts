@@ -67,7 +67,7 @@ export const productManager = new Elysia({ prefix: '/product' })
         return new Response(JSON.stringify(data));
     }, { beforeHandle: middleware })
     
-    .put('/create', async ({ body }: { body: CreateProductParams }) => {
+    .post('/create', async ({ body }: { body: CreateProductParams }) => {
         const productId = parse(uuid());
         const marketplaceId = parse(body.market);
         const [index] = PublicKey.findProgramAddressSync(
@@ -98,7 +98,7 @@ export const productManager = new Elysia({ prefix: '/product' })
         return new Response(JSON.stringify({ message: 'success', data }));
     }, { beforeHandle: middleware, body: CreateProductSchema })
 
-    .put('/update', async ({ body }: { body: UpdateProductParams }) => {
+    .post('/update', async ({ body }: { body: UpdateProductParams }) => {
         const { data, error } = await supabase
             .from('products')
             .update({

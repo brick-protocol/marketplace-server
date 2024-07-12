@@ -47,7 +47,7 @@ export const authManager = new Elysia({ prefix: '/auth' })
         }
     }, { body: NonceSchema })
 
-    .post('/login', async ({ body }) => {
+    .post('/login', async ({ body, cookie }) => {
         const { message, signature } = body;
 
         try {
@@ -69,8 +69,8 @@ export const authManager = new Elysia({ prefix: '/auth' })
                 });
             }
 
-            const address = signinMessage.publicKey;
             // Check if user exists, otherwise create a new one
+            const address = signinMessage.publicKey;
             const { data: user, error: userError } = await supabase
                 .from('users')
                 .select('*')
@@ -105,6 +105,9 @@ export const authManager = new Elysia({ prefix: '/auth' })
                 })
                 .eq('address', address);
 
+            cookie.token.value = token;
+            cookie.token.maxAge = 600;
+
             return new Response(JSON.stringify({ token }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' },
@@ -116,4 +119,12 @@ export const authManager = new Elysia({ prefix: '/auth' })
                 headers: { 'Content-Type': 'application/json' },
             });
         }
-    }, { body: LoginSchema });
+    }, { body: LoginSchema })
+    
+    .post('/logout', async ({ cookie }) => {
+            cookie.token.value = '';
+            cookie.token.maxAge = 0;
+        
+            return 'Logged out'
+        },
+    );

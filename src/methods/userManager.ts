@@ -1,5 +1,4 @@
 import { Elysia } from "elysia";
-import { v4 as uuid } from "uuid";
 import { t } from "elysia";
 import { supabase } from "../supabase";
 import { middleware } from "./auth/middleware";
@@ -89,7 +88,7 @@ export const userManager = new Elysia({ prefix: '/user' })
         return new Response(JSON.stringify({ message: 'success', data }));
     }, { beforeHandle: middleware, body: CreateUserSchema })
 
-    .put('/update', async ({ body }: { body: UpdateUserParams }) => {
+    .post('/update', async ({ body }: { body: UpdateUserParams }) => {
         const { data, error } = await supabase
             .from('users')
             .update({

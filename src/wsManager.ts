@@ -1,9 +1,13 @@
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { PaymentLayout, paymentAccounts } from "./solana";
+import { AccountLayout, getAssociatedTokenAddressSync, transferCheckedInstructionData } from "@solana/spl-token";
 import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { supabase } from "./supabase";
 import { WebSocket } from 'ws'
+import BigNumber from "bignumber.js";
+import { config } from "./config";
+import { TEN, APP_REFERENCE } from "./constants";
 
+// NOTE: NOT USED ANYMORE - SAVED FOR FUTURE DEVELOPMENT
+// Replaced by sendTransaction http endpoint where is saved the payment and parsed the transaction
 interface WebSocketManagerConfig {
     url: string;
     apiKey: string;
@@ -46,43 +50,22 @@ class WebSocketManager {
         try {
             const { id, params } = JSON.parse(message);
             if (id) console.log('Websocket communication open');
-            
+
             if (params) {
                 const base64Transaction = params.result.transaction.transaction[0];
                 const transactionBuffer = Buffer.from(base64Transaction, 'base64');
                 const transaction = VersionedTransaction.deserialize(transactionBuffer);
                 const instructions = transaction.message.compiledInstructions;
                 const payInstruction = instructions[instructions.length - 1];
+                const { amount } = transferCheckedInstructionData.decode(payInstruction.data);
+                const [source, mint, destination, owner, txProductReference, txAppReference] = payInstruction.accountKeyIndexes.map(index => 
+                    transaction.message.staticAccountKeys[index].toBase58(),
+                );
 
-                const { amount } = PaymentLayout.decode(Buffer.from(payInstruction.data));
-                const accountsKeys = transaction.message.getAccountKeys().staticAccountKeys.map(x => x.toString());
-                const accounts = {
-                    signer: accountsKeys[paymentAccounts.indexOf('signer')],
-                    paymentMint: accountsKeys[paymentAccounts.indexOf('paymentMint')],
-                    buyerVault: accountsKeys[paymentAccounts.indexOf('buyerVault')],
-                    sellerVault: accountsKeys[paymentAccounts.indexOf('sellerVault')],
-                    index: accountsKeys[paymentAccounts.indexOf('index')],
-                };
-
-                const { data: signerData } = await supabase
-                    .from('users')
-                    .select()
-                    .eq('id', accounts.signer)
-                    .single();
-
-                if (!signerData) {
-                    await supabase
-                        .from('users')
-                        .insert({ id: accounts.signer })
-                        .select('id');
-                }
-
-                // save inconsistencies and notify that someone is trying to sploit the system
-                // the entrypoint to the system is the solana program which is permisionless
                 const { data: product, error } = await supabase
                     .from('products')
                     .select('*')
-                    .eq('solana_index', accounts.index)
+                    .eq('solana_index', txProductReference)
                     .single();
           
                 if (error) {
@@ -91,31 +74,34 @@ class WebSocketManager {
                 }
                 if (!product) throw new Error('Product does not exist');
 
-                if (product.currency !== accounts.paymentMint) throw new Error('Invalid payment mint!!');
-
-                const receiverVault = getAssociatedTokenAddressSync(new PublicKey(product.currency), new PublicKey(product.seller));
-                if (receiverVault.toString() !== accounts.sellerVault) throw new Error('Invalid vault!!');
-
+                const sellerATA = await config.RPC.getAccountInfo(new PublicKey(destination), 'confirmed');
+                if (!sellerATA) throw new Error('error fetching ata info');
+              
+                const decodedSellerATA = AccountLayout.decode(sellerATA.data);
+                const seller = decodedSellerATA.owner.toBase58();
+                const signer = owner;
+                const price = BigNumber(product.price).times(TEN.pow(product.currency)).integerValue(BigNumber.ROUND_FLOOR);
+              
+                if (!BigNumber(amount.toString(16), 16).mod(price).isEqualTo(0)) throw new Error('amount is not a multiple of price');
+                if (APP_REFERENCE.toBase58() !== txAppReference) throw new Error('wrong app reference');
+                if (seller !== product.seller) throw new Error('wrong seller');
+              
                 const parsedPayment = {
                     signature: params.result.signature,
                     product: product.id,
-                    signer: accounts.signer,
-                    seller: product.seller,
-                    currency: accounts.paymentMint,
+                    signer,
+                    seller,
+                    currency: mint,
                     total_paid: amount.toString(16),
                     quantity: (BigInt(amount) / BigInt(product.price)).toString(16),
                     product_price: product.price,
                     timestamp: new Date().toISOString(),
                 };
-                const { data, error: insertError } = await supabase
+                const { error: insertError } = await supabase
                     .from('payments')
                     .insert(parsedPayment);
-    
-                if (insertError) {
-                    console.error('Error inserting product:', insertError.message);
-                    return new Response(JSON.stringify({ error: insertError.message }), { status: 500 });
-                }
-                
+
+                console.log(insertError);
                 console.log('Payment registered:', parsedPayment);
 
                 return new Response(JSON.stringify(data));
